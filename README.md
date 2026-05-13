@@ -15,4 +15,4 @@
 
 # 效果
 
-![preview.mp4](https://github.com/viceasha2008/refined-now-playing-netease-rebound/blob/master/preview.mp4)
+!(https://github.com/viceasha2008/refined-now-playing-netease-rebound/blob/master/preview.mp4)
