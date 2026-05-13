@@ -1,9 +1,9 @@
 {
     "manifest_version": 1,
-    "name": "RefinedNowPlaying",
-    "author": "solstice23",
-    "author_links": ["https://github.com/solstice23"],
-    "description": "重新设计的正在播放页面和歌词",
+    "name": "RefinedNowPlaying-Rebound",
+    "author": "solstice23 & viceasha2008",
+    "author_links": ["https://github.com/solstice23", "https://github.com/viceasha2008"],
+    "description": "全新伪流体设计-重新设计的正在播放页面和歌词",
     "preview": "preview.webp",
     "version": "2.19.5",
     "type": "extension",

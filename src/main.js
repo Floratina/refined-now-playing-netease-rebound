@@ -10,6 +10,7 @@ import './refined-control-bar.js';
 import { Background } from './background.js';
 import { CoverShadow } from './cover-shadow.js';
 import { Lyrics } from './lyrics.js';
+import { PSEUDO_FLUID_DEFAULTS } from './fluid-cover.js';
 import { themeFromSourceColor, QuantizerCelebi, Hct, Score } from "@importantimport/material-color-utilities";
 import { compatibilityWizard, hijackFailureNoticeCheck } from './compatibility-check.js';
 import { whatsNew } from './whats-new.js';
@@ -463,6 +464,7 @@ const addSettingsMenu = async (isFM = false) => {
 		const bgDim = getOptionDom('#bg-dim');
 		const bgDimForGradientBg = getOptionDom('#bg-dim-for-gradient-bg');
 		const bgDimForFluidBg = getOptionDom('#bg-dim-for-fluid-bg');
+		const bgDimForPseudoFluidBg = getOptionDom('#bg-dim-for-pseudo-fluid-bg');
 		const bgBlurForNoneBgMask = getOptionDom('#bg-blur-for-none-bg-mask');
 		const bgDimForNoneBgMask = getOptionDom('#bg-dim-for-none-bg-mask');
 		const bgOpacity = getOptionDom('#bg-opacity');
@@ -475,6 +477,7 @@ const addSettingsMenu = async (isFM = false) => {
 		bindSliderToCSSVariable(bgDim, '--bg-dim', 55, 'change', (x) => { return x / 100 });
 		bindSliderToCSSVariable(bgDimForGradientBg, '--bg-dim-for-gradient-bg', 45, 'change', (x) => { return x / 100 });
 		bindSliderToCSSVariable(bgDimForFluidBg, '--bg-dim-for-fluid-bg', 30, 'change', (x) => { return x / 100 });
+		bindSliderToCSSVariable(bgDimForPseudoFluidBg, '--bg-dim-for-pseudo-fluid-bg', 30, 'change', (x) => { return x / 100 });
 		bindSliderToCSSVariable(bgBlurForNoneBgMask, '--bg-blur-for-none-bg-mask', 0, 'change', (x) => { return `${x}px` });
 		bindSliderToCSSVariable(bgDimForNoneBgMask, '--bg-dim-for-none-bg-mask', 0, 'change', (x) => { return x / 100 });
 		bindSliderToCSSVariable(bgOpacity, '--bg-opacity', 0, 'change', (x) => { return 1 - x / 100 });
@@ -482,6 +485,170 @@ const addSettingsMenu = async (isFM = false) => {
 		bindCheckboxToClass(staticFluid, 'static-fluid', false, (x) => {
 			document.dispatchEvent(new CustomEvent('rnp-static-fluid', { detail: x }));
 		});
+
+		// 伪流体参数绑定
+		const pseudoFluidFps = getOptionDom('#pseudo-fluid-fps');
+		const pseudoFluidGaussianBlur = getOptionDom('#pseudo-fluid-gaussian-blur');
+		const pseudoFluidRenderScale = getOptionDom('#pseudo-fluid-render-scale');
+		const pseudoFluidMotionTrail = getOptionDom('#pseudo-fluid-motion-trail');
+		const pseudoFluidFwidthAA = getOptionDom('#pseudo-fluid-fwidth-aa');
+		const pseudoFluidFbmOctaves = getOptionDom('#pseudo-fluid-fbm-octaves');
+		const pseudoFluidPlainContour = getOptionDom('#pseudo-fluid-plain-contour');
+		const pseudoFluidHillContour = getOptionDom('#pseudo-fluid-hill-contour');
+		const pseudoFluidMinColorRatio = getOptionDom('#pseudo-fluid-min-color-ratio');
+		const pseudoFluidAllColorsPresence = getOptionDom('#pseudo-fluid-all-colors-presence');
+		const pseudoFluidDarkLThreshold = getOptionDom('#pseudo-fluid-dark-l-threshold');
+		const pseudoFluidDarkLBoost = getOptionDom('#pseudo-fluid-dark-l-boost');
+		const pseudoFluidDarkSBoost = getOptionDom('#pseudo-fluid-dark-s-boost');
+		const pseudoFluidColorMidStrict = getOptionDom('#pseudo-fluid-color-mid-strict');
+		const pseudoFluidGlobalSaturation = getOptionDom('#pseudo-fluid-global-saturation');
+		const pseudoFluidGlobalLightness = getOptionDom('#pseudo-fluid-global-lightness');
+		const pseudoFluidPlainAreaRatio = getOptionDom('#pseudo-fluid-plain-area-ratio');
+		const pseudoFluidTerrainUniformity = getOptionDom('#pseudo-fluid-terrain-uniformity');
+		const pseudoFluidContourSmoothness = getOptionDom('#pseudo-fluid-contour-smoothness');
+		const pseudoFluidNoiseScale = getOptionDom('#pseudo-fluid-noise-scale');
+		const pseudoFluidTurbulenceSpeed = getOptionDom('#pseudo-fluid-turbulence-speed');
+		const pseudoFluidDomainWarping = getOptionDom('#pseudo-fluid-domain-warping');
+		const pseudoFluidDeformationSpeed = getOptionDom('#pseudo-fluid-deformation-speed');
+		const pseudoFluidTranslationSpeed = getOptionDom('#pseudo-fluid-translation-speed');
+		const pseudoFluidTranslationDirX = getOptionDom('#pseudo-fluid-translation-dir-x');
+		const pseudoFluidTranslationDirY = getOptionDom('#pseudo-fluid-translation-dir-y');
+
+		const dispatchPseudoFluidConfig = (config) => {
+			document.dispatchEvent(new CustomEvent('rnp-pseudo-fluid-config', { detail: config }));
+		};
+
+		// FPS: slider index 0-4 → 30, 45, 60, 90, 120
+		const fpsValues = [30, 45, 60, 90, 120];
+		bindSliderToFunction(pseudoFluidFps, (x) => {
+			dispatchPseudoFluidConfig({ FPS: fpsValues[parseInt(x)] });
+		}, 1, 'change');
+
+		// GAUSSIAN_BLUR: slider 0-45 → 0-90 (step 2)
+		bindSliderToFunction(pseudoFluidGaussianBlur, (x) => {
+			dispatchPseudoFluidConfig({ GAUSSIAN_BLUR: parseInt(x) * 2 });
+		}, 16, 'change');
+
+		// RENDER_SCALE: slider 25-100 → 0.25-1.0
+		bindSliderToFunction(pseudoFluidRenderScale, (x) => {
+			dispatchPseudoFluidConfig({ RENDER_SCALE: parseInt(x) / 100 });
+		}, 100, 'change');
+
+		// MOTION_TRAIL: slider 0-100 → 0.0-1.0
+		bindSliderToFunction(pseudoFluidMotionTrail, (x) => {
+			dispatchPseudoFluidConfig({ MOTION_TRAIL: parseInt(x) / 100 });
+		}, 0, 'change');
+
+		// FWIDTH_AA: checkbox
+		bindCheckboxToFunction(pseudoFluidFwidthAA, (x) => {
+			dispatchPseudoFluidConfig({ FWIDTH_AA: x ? 1 : 0 });
+		}, true);
+
+		// FBM_OCTAVES: slider 1-6
+		bindSliderToFunction(pseudoFluidFbmOctaves, (x) => {
+			dispatchPseudoFluidConfig({ FBM_OCTAVES: parseInt(x) });
+		}, 3, 'change');
+
+		// PLAIN_CONTOUR_COUNT: slider 1-64
+		bindSliderToFunction(pseudoFluidPlainContour, (x) => {
+			dispatchPseudoFluidConfig({ PLAIN_CONTOUR_COUNT: parseInt(x) });
+		}, 18, 'change');
+
+		// HILL_CONTOUR_COUNT: slider 1-64
+		bindSliderToFunction(pseudoFluidHillContour, (x) => {
+			dispatchPseudoFluidConfig({ HILL_CONTOUR_COUNT: parseInt(x) });
+		}, 18, 'change');
+
+		// MIN_COLOR_RATIO_THRESHOLD: slider 1-100 → ×0.0001
+		bindSliderToFunction(pseudoFluidMinColorRatio, (x) => {
+			dispatchPseudoFluidConfig({ MIN_COLOR_RATIO_THRESHOLD: parseInt(x) * 0.0001 });
+		}, 6, 'change');
+
+		// ALL_COLORS_PRESENCE_FACTOR: slider 20-200 → ×0.1
+		bindSliderToFunction(pseudoFluidAllColorsPresence, (x) => {
+			dispatchPseudoFluidConfig({ ALL_COLORS_PRESENCE_FACTOR: parseInt(x) * 0.1 });
+		}, 100, 'change');
+
+		// DARK_COLOR_LIGHTNESS_THRESHOLD: slider 0-100 → ×0.01
+		bindSliderToFunction(pseudoFluidDarkLThreshold, (x) => {
+			dispatchPseudoFluidConfig({ DARK_COLOR_LIGHTNESS_THRESHOLD: parseInt(x) * 0.01 });
+		}, 35, 'change');
+
+		// DARK_COLOR_LIGHTNESS_BOOST: slider 0-100 → ×0.01
+		bindSliderToFunction(pseudoFluidDarkLBoost, (x) => {
+			dispatchPseudoFluidConfig({ DARK_COLOR_LIGHTNESS_BOOST: parseInt(x) * 0.01 });
+		}, 4, 'change');
+
+		// DARK_COLOR_SATURATION_BOOST: slider 0-100 → ×0.01
+		bindSliderToFunction(pseudoFluidDarkSBoost, (x) => {
+			dispatchPseudoFluidConfig({ DARK_COLOR_SATURATION_BOOST: parseInt(x) * 0.01 });
+		}, 8, 'change');
+
+		// COLOR_MID_DISTRIBUTION_STRICTNESS: slider 1-100 → ×0.01
+		bindSliderToFunction(pseudoFluidColorMidStrict, (x) => {
+			dispatchPseudoFluidConfig({ COLOR_MID_DISTRIBUTION_STRICTNESS: parseInt(x) * 0.01 });
+		}, 100, 'change');
+
+		// GLOBAL_SATURATION: slider 10-300 → ×0.01
+		bindSliderToFunction(pseudoFluidGlobalSaturation, (x) => {
+			dispatchPseudoFluidConfig({ GLOBAL_SATURATION: parseInt(x) * 0.01 });
+		}, 165, 'change');
+
+		// GLOBAL_LIGHTNESS: slider 10-200 → ×0.01
+		bindSliderToFunction(pseudoFluidGlobalLightness, (x) => {
+			dispatchPseudoFluidConfig({ GLOBAL_LIGHTNESS: parseInt(x) * 0.01 });
+		}, 95, 'change');
+
+		// PLAIN_AREA_RATIO: slider 1-100 → ×0.01
+		bindSliderToFunction(pseudoFluidPlainAreaRatio, (x) => {
+			dispatchPseudoFluidConfig({ PLAIN_AREA_RATIO: parseInt(x) * 0.01 });
+		}, 52, 'change');
+
+		// TERRAIN_UNIFORMITY: slider 1-200 → ×0.01
+		bindSliderToFunction(pseudoFluidTerrainUniformity, (x) => {
+			dispatchPseudoFluidConfig({ TERRAIN_UNIFORMITY: parseInt(x) * 0.01 });
+		}, 55, 'change');
+
+		// CONTOUR_SMOOTHNESS: slider 1-100 → ×0.0001
+		bindSliderToFunction(pseudoFluidContourSmoothness, (x) => {
+			dispatchPseudoFluidConfig({ CONTOUR_SMOOTHNESS: parseInt(x) * 0.0001 });
+		}, 5, 'change');
+
+		// NOISE_SCALE: slider 1-200 → ×0.01
+		bindSliderToFunction(pseudoFluidNoiseScale, (x) => {
+			dispatchPseudoFluidConfig({ NOISE_SCALE: parseInt(x) * 0.01 });
+		}, 20, 'change');
+
+		// TURBULENCE_SPEED: slider 1-100 → 指数映射 0.0000025–0.25
+		bindSliderToFunction(pseudoFluidTurbulenceSpeed, (x) => {
+			const val = 0.0000025 * Math.pow(100000, (parseInt(x) - 1) / 99);
+			dispatchPseudoFluidConfig({ TURBULENCE_SPEED: val });
+		}, 18, 'change');
+
+		// DOMAIN_WARPING: slider 1-200 → ×0.01
+		bindSliderToFunction(pseudoFluidDomainWarping, (x) => {
+			dispatchPseudoFluidConfig({ DOMAIN_WARPING: parseInt(x) * 0.01 });
+		}, 36, 'change');
+
+		// TERRAIN_DEFORMATION_SPEED: slider 1-100 → ×0.0001
+		bindSliderToFunction(pseudoFluidDeformationSpeed, (x) => {
+			dispatchPseudoFluidConfig({ TERRAIN_DEFORMATION_SPEED: parseInt(x) * 0.0001 });
+		}, 30, 'change');
+
+		// TERRAIN_TRANSLATION_SPEED: slider 1-100 → ×0.0001
+		bindSliderToFunction(pseudoFluidTranslationSpeed, (x) => {
+			dispatchPseudoFluidConfig({ TERRAIN_TRANSLATION_SPEED: parseInt(x) * 0.0001 });
+		}, 30, 'change');
+
+		// TERRAIN_TRANSLATION_DIR_X: slider -100-100 → ×0.01
+		bindSliderToFunction(pseudoFluidTranslationDirX, (x) => {
+			dispatchPseudoFluidConfig({ TERRAIN_TRANSLATION_DIR_X: parseInt(x) * 0.01 });
+		}, 100, 'change');
+
+		// TERRAIN_TRANSLATION_DIR_Y: slider -100-100 → ×0.01
+		bindSliderToFunction(pseudoFluidTranslationDirY, (x) => {
+			dispatchPseudoFluidConfig({ TERRAIN_TRANSLATION_DIR_Y: parseInt(x) * 0.01 });
+		}, 50, 'change');
 
 		// 歌词
 		const originalLyricBold = getOptionDom('#original-lyric-bold');

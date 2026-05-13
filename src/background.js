@@ -1,17 +1,21 @@
 import './background.scss';
+import './fluid-cover.scss';
 import { getGradientFromPalette } from './color-utils';
+import { PseudoFluidCover, PSEUDO_FLUID_DEFAULTS } from './fluid-cover';
 import ColorThief from 'colorthief';
 
 const useState = React.useState;
 const useEffect = React.useEffect;
 const useRef = React.useRef;
+const useCallback = React.useCallback;
 
 const colorThief = new ColorThief();
 
 export function Background(props) {
-	const [type, setType] = useState(props.type ?? 'blur'); // blur, gradient, fluid , solid
+	const [type, setType] = useState(props.type ?? 'blur'); // blur, gradient, fluid, pseudo-fluid, solid
 	const [url, setUrl] = useState('');
 	const [staticFluid, setStaticFluid] = useState(true);
+	const [pseudoFluidConfig, setPseudoFluidConfig] = useState(PSEUDO_FLUID_DEFAULTS);
 	const image = props.image;
 
 	
@@ -60,6 +64,9 @@ export function Background(props) {
 		document.addEventListener('rnp-static-fluid', (e) => {
 			setStaticFluid(e.detail ?? false);
 		});
+		document.addEventListener('rnp-pseudo-fluid-config', (e) => {
+			setPseudoFluidConfig(prev => ({ ...prev, ...e.detail }));
+		});
 	}, []);
 	
 	return (
@@ -72,6 +79,9 @@ export function Background(props) {
 			)}
 			{type === 'fluid' && (
 				<FluidBackground url={url} static={staticFluid} isFM={props.isFM} />
+			)}
+			{type === 'pseudo-fluid' && (
+				<PseudoFluidBackground url={url} config={pseudoFluidConfig} isFM={props.isFM} />
 			)}
 			{type === 'solid' && (
 				<SolidBackground />
@@ -127,9 +137,82 @@ function GradientBackground(props) {
 	);
 }
 
+function PseudoFluidBackground(props) {
+	const containerRef = useRef();
+	const coverRef = useRef(null);
+	const [songId, setSongId] = useState("0");
+	const playState = useRef(true);
+
+	const onPlayStateChange = (id, state) => {
+		if (!props.isFM) {
+			playState.current = document.querySelector("#main-player .btnp").classList.contains("btnp-pause");
+		} else {
+			playState.current = document.querySelector(".m-player-fm .btnp").classList.contains("btnp-pause");
+		}
+		setSongId(id);
+		if (coverRef.current) {
+			coverRef.current.setPaused(!playState.current);
+		}
+	};
+
+	useEffect(() => {
+		legacyNativeCmder.appendRegisterCall(
+			"PlayState",
+			"audioplayer",
+			onPlayStateChange
+		);
+		return () => {
+			legacyNativeCmder.removeRegisterCall(
+				"PlayState",
+				"audioplayer",
+				onPlayStateChange
+			);
+		};
+	}, []);
+
+	useEffect(() => {
+		if (!props.url || !containerRef.current) return;
+		
+		const initOrUpdate = async () => {
+			if (!coverRef.current) {
+				coverRef.current = new PseudoFluidCover(containerRef.current, props.config);
+				await coverRef.current.init(props.url);
+				coverRef.current.setPaused(!playState.current);
+			} else {
+				await coverRef.current.updateImage(props.url);
+			}
+		};
+		initOrUpdate();
+	}, [props.url]);
+
+	useEffect(() => {
+		return () => {
+			if (coverRef.current) {
+				coverRef.current.dispose();
+				coverRef.current = null;
+			}
+		};
+	}, []);
+
+	// 监听配置变化
+	useEffect(() => {
+		if (coverRef.current) {
+			coverRef.current.updateConfig(props.config);
+		}
+	}, [props.config]);
+
+	return (
+		<div className="rnp-background-pseudo-fluid">
+			<div ref={containerRef} className="rnp-pseudo-fluid-container" />
+			<div className="rnp-pseudo-fluid-blur-layer" />
+			<div className="rnp-background-pseudo-fluid-dim" />
+		</div>
+	);
+}
+
 function FluidBackground(props) {
 	const [canvas1, canvas2, canvas3, canvas4] = [useRef(), useRef(), useRef(), useRef()];
-	const [feTurbulence, feDisplacementMap] = [useRef(), useRef()];
+	const feTurbulence = useRef();
 	const fluidContainer = useRef();
 	const staticFluidStyleRef = useRef();
 	const [songId, setSongId] = useState("0");
@@ -224,135 +307,7 @@ function FluidBackground(props) {
 		}
 	}, []);
 
-	const setDisplacementScale = React.useCallback((value) => {
-		if (!feDisplacementMap.current) return;
-		feDisplacementMap.current.setAttribute('scale', value);
-	}, []);
-
-	// Audio-responsive background (For LibVolumeLevelProvider)
-	if (loadedPlugins.LibFrontendPlay) {
-		/*const processor = useRef({});
-		useEffect(() => {
-			processor.current.audioContext = new AudioContext();
-			processor.current.audioSource = null;
-			processor.current.analyser = processor.current.audioContext.createAnalyser();
-			//processor.current.analyser.connect(processor.current.audioContext.destination);
-			processor.current.analyser.fftSize = 512;
-			processor.current.filter = processor.current.audioContext.createBiquadFilter();
-			processor.current.filter.type = 'lowpass';
-			processor.current.bufferLength = processor.current.analyser.frequencyBinCount;
-			processor.current.dataArray = new Float32Array(processor.current.bufferLength);
-		}, []); 
-
-		const onAudioSourceChange = (e) => {
-			processor.current.audio = e.detail;
-			console.log('audio source changed', processor.current.audio);
-			if (!processor.current.audio) return;
-			if (processor.current.audioSource) processor.current.audioSource.disconnect();
-			processor.current.audioSource = processor.current.audioContext.createMediaElementSource(processor.current.audio);
-			processor.current.audioSource.connect(processor.current.filter).connect(processor.current.analyser);
-			processor.current.audioSource.connect(processor.current.audioContext.destination);
-		};
-			
-		useEffect(() => {
-			loadedPlugins.LibFrontendPlay.addEventListener(
-				"updateCurrentAudioPlayer",
-				onAudioSourceChange
-			);
-			return () => {
-				loadedPlugins.LibFrontendPlay.removeEventListener(
-					"updateCurrentAudioPlayer",
-					onAudioSourceChange
-				);
-			}
-		}, []);*/
-
-		
-		const processor = useRef({});
-		useEffect(() => {
-			//processor.current.bufferLength = loadedPlugins.LibFrontendPlay.currentAudioAnalyser.frequencyBinCount;
-			processor.current.bufferLength = 1024;
-			processor.current.dataArray = new Float32Array(processor.current.bufferLength);
-		}, []); 
-
-
-
-		const request = useRef(0);
-		useEffect(() => {
-			const animate = () => {
-				request.current = requestAnimationFrame(animate);
-				if (!playState.current) return;
-				//processor.current.analyser.getFloatFrequencyData(processor.current.dataArray);
-				//const max = Math.max(...processor.current.dataArray);
-				loadedPlugins.LibFrontendPlay.currentAudioAnalyser.getFloatFrequencyData(processor.current.dataArray);
-				const max = Math.max(...processor.current.dataArray);
-				//const percentage = (max - processor.current.analyser.minDecibels) / (processor.current.analyser.maxDecibels - processor.current.analyser.minDecibels);
-				const percentage = Math.pow(1.3, max / 20) * 2 - 1;
-				//console.log(max, percentage, processor.current.audio.volume);
-				setDisplacementScale(Math.min(600, Math.max(200, 800 - percentage * 800)));
-			};
-			request.current = requestAnimationFrame(animate);
-			return () => {
-				cancelAnimationFrame(request.current);
-			}
-		}, []);
-	}
-	// Audio-responsive background (For LibVolumeLevelProvider)
-	else if (typeof(registerAudioLevelCallback) == "function") {
-		let audioLevels = {}, audioLevelSum = 0, now = 0;
-		let maxq = [], minq = [];
-		let percentage;
-		const onAudioLevelChange = (value) => {
-			if (!playState.current) return;
-			now += 1;
-			if (now <= 100) {
-				audioLevels[now] = value;
-				audioLevelSum += value;
-				while (maxq.length && audioLevels[maxq[maxq.length - 1]] <= value) maxq.pop();
-				maxq.push(now);
-				while (minq.length && audioLevels[minq[minq.length - 1]] >= value) minq.pop();
-				minq.push(now);
-				setDisplacementScale(400 - value * 200);
-				return;
-			}
-			audioLevelSum -= audioLevels[now - 100];
-			delete audioLevels[now - 100];
-			audioLevels[now] = value;
-			audioLevelSum += value;
-			while (maxq.length && audioLevels[maxq[maxq.length - 1]] <= value) maxq.pop();
-			maxq.push(now);
-			while (maxq[0] <= now - 100) maxq.shift();
-			while (minq.length && audioLevels[minq[minq.length - 1]] >= value) minq.pop();
-			minq.push(now);
-			while (minq[0] <= now - 100) minq.shift();
-			//console.log(audioLevels[maxq[0]], audioLevels[minq[0]], audioLevels[maxq[0]] - audioLevels[minq[0]]);
-			//console.log(value, audioLevelSum / 100, value - audioLevelSum / 100);
-			percentage = (value - audioLevels[minq[0]]) / (audioLevels[maxq[0]] - audioLevels[minq[0]]);
-			if (percentage != percentage) percentage = 1 / 3; // NaN
-			function easeInOutQuint(x) {
-				return x < 0.5 ? 16 * x * x * x * x * x : 1 - Math.pow(-2 * x + 2, 5) / 2;
-			}
-			//console.log('percentage', percentage, easeInOutQuint(percentage));
-			percentage = easeInOutQuint(percentage);
-			const scale = 500 - (percentage) * 300;
-			//feDisplacementMap.current.setAttribute('scale', scale);
-			if (!feDisplacementMap.current) return;
-			const oldScale = parseFloat(feDisplacementMap.current.getAttribute('scale'));
-			setDisplacementScale(oldScale + (scale - oldScale) * 0.1);
-		}
-		useEffect(() => {
-			registerAudioLevelCallback(onAudioLevelChange);
-			return () => {
-				unregisterAudioLevelCallback(onAudioLevelChange);
-				setDisplacementScale(400);
-			}
-		}, []);
-		useEffect(() => {
-			audioLevels = [];
-			audioLevelSum = 0;
-		}, [songId]);
-	}
-
+	// 音频暂停时停止流体移动，不再每帧修改 feDisplacementMap scale
 	return (
 		<>
 			<style ref={staticFluidStyleRef} type="text/css">
@@ -371,12 +326,7 @@ function FluidBackground(props) {
 			<svg width="0" height="0" style={{ position: 'absolute' }}>
 				<filter id="fluid-filter" x="-20%" y="-20%" width="140%" height="140%" filterUnits="objectBoundingBox" primitiveUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
 					<feTurbulence ref={feTurbulence} type="fractalNoise" baseFrequency="0.005" numOctaves="1" seed="0"></feTurbulence> 
-					{
-						props.static ?
-						<feDisplacementMap key={1} in="SourceGraphic" scale="400"></feDisplacementMap> :
-						<feDisplacementMap key={2} ref={feDisplacementMap} in="SourceGraphic" scale="400"></feDisplacementMap>
-					}
-					{/*<feGaussianBlur stdDeviation="80 60" x="0%" y="0%" width="100%" height="100%" in="" edgeMode="duplicate" result="blur"></feGaussianBlur>*/}
+					<feDisplacementMap in="SourceGraphic" scale="400"></feDisplacementMap>
 				</filter>
 			</svg>
 			<div className="rnp-background-fluid" style={{ backgroundImage: `url(${props.url})` }}>

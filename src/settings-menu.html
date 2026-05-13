@@ -112,9 +112,10 @@
 
 		<div class="rnp-group" data-tab="background">
 			<div class="rnp-group-title">背景</div>
-			<div class="rnp-select-group-wrapper">
+			<div class="rnp-select-group-wrapper rnp-bg-type-wrapper">
 				<label for="bg-type" class="rnp-select-group-label">类型</label>
-				<div class="rnp-select-group" id="background-type">
+				<div class="rnp-select-group rnp-select-group-vertical" id="background-type">
+					<button class="rnp-select-group-btn" value="pseudo-fluid">伪流体</button>
 					<button class="rnp-select-group-btn selected" value="fluid">流体</button>
 					<button class="rnp-select-group-btn" value="blur">模糊</button>
 					<button class="rnp-select-group-btn" value="gradient">渐变</button>
@@ -122,36 +123,202 @@
 					<button class="rnp-select-group-btn" value="none">无</button>
 				</div>
 			</div>
-			<div class="rnp-checkbox-wrapper static-fluid" style="--estimated-height: 20px;">
+			<!-- 旧流体背景选项 -->
+			<div class="rnp-checkbox-wrapper rnp-fluid-only static-fluid" style="--estimated-height: 20px;">
 				<input id="static-fluid" type="checkbox" class="rnp-checkbox">
 				<label for="static-fluid" class="rnp-checkbox-label">静态流体</label>
 			</div>
-			<span class="rnp-checkbox-note" style="--estimated-height: 15px;">减少流体背景的性能开销</span>
-			<div class="rnp-checkbox-wrapper gradient-bg-dynamic" style="--estimated-height: 20px;">
+			<span class="rnp-checkbox-note rnp-fluid-only" style="--estimated-height: 15px;">减少流体背景的性能开销</span>
+			<div class="rnp-checkbox-wrapper rnp-gradient-only gradient-bg-dynamic" style="--estimated-height: 20px;">
 				<input id="gradient-bg-dynamic" type="checkbox" class="rnp-checkbox">
 				<label for="gradient-bg-dynamic" class="rnp-checkbox-label">动态渐变</label>
 			</div>
-			<div class="rnp-slider-wrapper bg-blur">
+			<div class="rnp-slider-wrapper rnp-blur-only bg-blur">
 				<label for="bg-blur" class="rnp-slider-label">模糊<button class="rnp-slider-reset"></button></label>
 				<input id="bg-blur" type="range" class="rnp-slider" min="0" max="128" value="90" default="90">
 			</div>
-			<div class="rnp-slider-wrapper bg-dim" style="transition: all 0s;">
+			<div class="rnp-slider-wrapper rnp-blur-only bg-dim" style="transition: all 0s;">
 				<label for="bg-dim" class="rnp-slider-label">暗化<button class="rnp-slider-reset"></button></label>
 				<input id="bg-dim" type="range" class="rnp-slider" min="0" max="100" value="55" default="55">
 			</div>
-			<div class="rnp-slider-wrapper bg-dim-for-gradient-bg" style="transition: all 0s;"> <!-- 渐变背景 独立的暗化值 -->
+			<div class="rnp-slider-wrapper rnp-gradient-only bg-dim-for-gradient-bg" style="transition: all 0s;">
 				<label for="bg-dim-for-gradient-bg" class="rnp-slider-label">暗化<button class="rnp-slider-reset"></button></label>
 				<input id="bg-dim-for-gradient-bg" type="range" class="rnp-slider" min="0" max="100" value="45" default="45">
 			</div>
-			<div class="rnp-slider-wrapper bg-dim-for-fluid-bg" style="transition: all 0s;"> <!-- 流体背景 独立的暗化值 -->
+			<div class="rnp-slider-wrapper rnp-fluid-only bg-dim-for-fluid-bg" style="transition: all 0s;">
 				<label for="bg-dim-for-fluid-bg" class="rnp-slider-label">暗化<button class="rnp-slider-reset"></button></label>
 				<input id="bg-dim-for-fluid-bg" type="range" class="rnp-slider" min="0" max="90" value="30" default="30">
 			</div>
-			<div class="rnp-slider-wrapper bg-blur-for-none-bg-mask"> <!-- 无背景 遮罩 独立的模糊值 -->
+			<!-- 伪流体背景参数 -->
+			<div class="rnp-slider-wrapper rnp-pseudo-fluid-only with-ticks">
+				<label for="pseudo-fluid-fps" class="rnp-slider-label">FPS<button class="rnp-slider-reset"></button></label>
+				<input id="pseudo-fluid-fps" type="range" class="rnp-slider" min="0" max="4" value="1" default="1" step="1">
+				<div class="rnp-slider-ticks">
+					<div class="rnp-slider-tick">30</div>
+					<div class="rnp-slider-tick">45</div>
+					<div class="rnp-slider-tick">60</div>
+					<div class="rnp-slider-tick">90</div>
+					<div class="rnp-slider-tick">120</div>
+				</div>
+			</div>
+			<div class="rnp-slider-wrapper rnp-pseudo-fluid-only with-ticks">
+				<label for="pseudo-fluid-gaussian-blur" class="rnp-slider-label">高斯模糊<button class="rnp-slider-reset"></button></label>
+				<input id="pseudo-fluid-gaussian-blur" type="range" class="rnp-slider" min="0" max="45" value="16" default="16" step="1">
+				<div class="rnp-slider-ticks">
+					<div class="rnp-slider-tick">0</div>
+					<div class="rnp-slider-tick">30</div>
+					<div class="rnp-slider-tick">60</div>
+					<div class="rnp-slider-tick">90</div>
+				</div>
+			</div>
+			<span class="rnp-slider-note rnp-pseudo-fluid-only">单位 px，0 为关闭</span>
+			<div class="rnp-slider-wrapper rnp-pseudo-fluid-only with-ticks">
+				<label for="pseudo-fluid-render-scale" class="rnp-slider-label">渲染分辨率<button class="rnp-slider-reset"></button></label>
+				<input id="pseudo-fluid-render-scale" type="range" class="rnp-slider" min="25" max="100" value="100" default="100" step="1">
+				<div class="rnp-slider-ticks">
+					<div class="rnp-slider-tick">25%</div>
+					<div class="rnp-slider-tick">50%</div>
+					<div class="rnp-slider-tick">75%</div>
+					<div class="rnp-slider-tick">100%</div>
+				</div>
+			</div>
+			<span class="rnp-slider-note rnp-pseudo-fluid-only">降低可改善性能，100%为原始分辨率</span>
+			<div class="rnp-slider-wrapper rnp-pseudo-fluid-only with-ticks">
+				<label for="pseudo-fluid-motion-trail" class="rnp-slider-label">运动拖影<button class="rnp-slider-reset"></button></label>
+				<input id="pseudo-fluid-motion-trail" type="range" class="rnp-slider" min="0" max="100" value="0" default="0" step="1">
+				<div class="rnp-slider-ticks">
+					<div class="rnp-slider-tick">关闭</div>
+					<div class="rnp-slider-tick">弱</div>
+					<div class="rnp-slider-tick">中</div>
+					<div class="rnp-slider-tick">强</div>
+				</div>
+			</div>
+			<span class="rnp-slider-note rnp-pseudo-fluid-only">帧残留效果，可掩盖色彩抖动，0 为关闭</span>
+			<div class="rnp-checkbox-wrapper rnp-pseudo-fluid-only">
+				<input id="pseudo-fluid-fwidth-aa" type="checkbox" class="rnp-checkbox" checked>
+				<label for="pseudo-fluid-fwidth-aa" class="rnp-checkbox-label">边缘抗锯齿 (fwidth)</label>
+			</div>
+			<div class="rnp-slider-wrapper rnp-pseudo-fluid-only with-ticks">
+				<label for="pseudo-fluid-fbm-octaves" class="rnp-slider-label">噪声精度 (FBM)<button class="rnp-slider-reset"></button></label>
+				<input id="pseudo-fluid-fbm-octaves" type="range" class="rnp-slider" min="1" max="6" value="3" default="3" step="1">
+				<div class="rnp-slider-ticks">
+					<div class="rnp-slider-tick">1</div>
+					<div class="rnp-slider-tick">2</div>
+					<div class="rnp-slider-tick">3</div>
+					<div class="rnp-slider-tick">4</div>
+					<div class="rnp-slider-tick">5</div>
+					<div class="rnp-slider-tick">6</div>
+				</div>
+			</div>
+			<span class="rnp-slider-note rnp-pseudo-fluid-only">每级 +5 次噪声计算，越高越细腻，GPU 开销越大</span>
+			<div class="rnp-slider-wrapper rnp-pseudo-fluid-only">
+				<label for="pseudo-fluid-plain-contour" class="rnp-slider-label">平原等高线数量<button class="rnp-slider-reset"></button></label>
+				<input id="pseudo-fluid-plain-contour" type="range" class="rnp-slider" min="1" max="64" value="18" default="18" step="1">
+			</div>
+			<div class="rnp-slider-wrapper rnp-pseudo-fluid-only">
+				<label for="pseudo-fluid-hill-contour" class="rnp-slider-label">山丘等高线数量<button class="rnp-slider-reset"></button></label>
+				<input id="pseudo-fluid-hill-contour" type="range" class="rnp-slider" min="1" max="64" value="18" default="18" step="1">
+			</div>
+			<div class="rnp-slider-wrapper rnp-pseudo-fluid-only">
+				<label for="pseudo-fluid-min-color-ratio" class="rnp-slider-label">杂色过滤阈值<button class="rnp-slider-reset"></button></label>
+				<input id="pseudo-fluid-min-color-ratio" type="range" class="rnp-slider" min="1" max="100" value="6" default="6" step="1">
+			</div>
+			<span class="rnp-slider-note rnp-pseudo-fluid-only">×0.0001，默认 0.0006</span>
+			<div class="rnp-slider-wrapper rnp-pseudo-fluid-only">
+				<label for="pseudo-fluid-all-colors-presence" class="rnp-slider-label">全色彩呈现系数<button class="rnp-slider-reset"></button></label>
+				<input id="pseudo-fluid-all-colors-presence" type="range" class="rnp-slider" min="20" max="200" value="100" default="100" step="1">
+			</div>
+			<span class="rnp-slider-note rnp-pseudo-fluid-only">×0.1，默认 10.0</span>
+			<div class="rnp-slider-wrapper rnp-pseudo-fluid-only">
+				<label for="pseudo-fluid-dark-l-threshold" class="rnp-slider-label">暗色明度阈值<button class="rnp-slider-reset"></button></label>
+				<input id="pseudo-fluid-dark-l-threshold" type="range" class="rnp-slider" min="0" max="100" value="35" default="35" step="1">
+			</div>
+			<span class="rnp-slider-note rnp-pseudo-fluid-only">×0.01，默认 0.35</span>
+			<div class="rnp-slider-wrapper rnp-pseudo-fluid-only">
+				<label for="pseudo-fluid-dark-l-boost" class="rnp-slider-label">暗色明度提升<button class="rnp-slider-reset"></button></label>
+				<input id="pseudo-fluid-dark-l-boost" type="range" class="rnp-slider" min="0" max="100" value="4" default="4" step="1">
+			</div>
+			<span class="rnp-slider-note rnp-pseudo-fluid-only">×0.01，默认 0.04</span>
+			<div class="rnp-slider-wrapper rnp-pseudo-fluid-only">
+				<label for="pseudo-fluid-dark-s-boost" class="rnp-slider-label">暗色饱和度提升<button class="rnp-slider-reset"></button></label>
+				<input id="pseudo-fluid-dark-s-boost" type="range" class="rnp-slider" min="0" max="100" value="8" default="8" step="1">
+			</div>
+			<span class="rnp-slider-note rnp-pseudo-fluid-only">×0.01，默认 0.08</span>
+			<div class="rnp-slider-wrapper rnp-pseudo-fluid-only">
+				<label for="pseudo-fluid-color-mid-strict" class="rnp-slider-label">色彩中段分布严格度<button class="rnp-slider-reset"></button></label>
+				<input id="pseudo-fluid-color-mid-strict" type="range" class="rnp-slider" min="1" max="100" value="100" default="100" step="1">
+			</div>
+			<span class="rnp-slider-note rnp-pseudo-fluid-only">×0.01，默认 1.0</span>
+			<div class="rnp-slider-wrapper rnp-pseudo-fluid-only">
+				<label for="pseudo-fluid-global-saturation" class="rnp-slider-label">全局饱和度<button class="rnp-slider-reset"></button></label>
+				<input id="pseudo-fluid-global-saturation" type="range" class="rnp-slider" min="10" max="300" value="165" default="165" step="1">
+			</div>
+			<span class="rnp-slider-note rnp-pseudo-fluid-only">×0.01，默认 1.65</span>
+			<div class="rnp-slider-wrapper rnp-pseudo-fluid-only">
+				<label for="pseudo-fluid-global-lightness" class="rnp-slider-label">全局明度<button class="rnp-slider-reset"></button></label>
+				<input id="pseudo-fluid-global-lightness" type="range" class="rnp-slider" min="10" max="200" value="95" default="95" step="1">
+			</div>
+			<span class="rnp-slider-note rnp-pseudo-fluid-only">×0.01，默认 0.95</span>
+			<div class="rnp-slider-wrapper rnp-pseudo-fluid-only">
+				<label for="pseudo-fluid-plain-area-ratio" class="rnp-slider-label">平原面积偏好<button class="rnp-slider-reset"></button></label>
+				<input id="pseudo-fluid-plain-area-ratio" type="range" class="rnp-slider" min="1" max="100" value="52" default="52" step="1">
+			</div>
+			<span class="rnp-slider-note rnp-pseudo-fluid-only">×0.01，默认 0.52</span>
+			<div class="rnp-slider-wrapper rnp-pseudo-fluid-only">
+				<label for="pseudo-fluid-terrain-uniformity" class="rnp-slider-label">地形均匀度<button class="rnp-slider-reset"></button></label>
+				<input id="pseudo-fluid-terrain-uniformity" type="range" class="rnp-slider" min="1" max="200" value="55" default="55" step="1">
+			</div>
+			<span class="rnp-slider-note rnp-pseudo-fluid-only">×0.01，默认 0.55</span>
+			<div class="rnp-slider-wrapper rnp-pseudo-fluid-only">
+				<label for="pseudo-fluid-contour-smoothness" class="rnp-slider-label">等高线平滑度<button class="rnp-slider-reset"></button></label>
+				<input id="pseudo-fluid-contour-smoothness" type="range" class="rnp-slider" min="1" max="100" value="5" default="5" step="1">
+			</div>
+			<span class="rnp-slider-note rnp-pseudo-fluid-only">×0.0001，默认 0.0005</span>
+			<div class="rnp-slider-wrapper rnp-pseudo-fluid-only">
+				<label for="pseudo-fluid-noise-scale" class="rnp-slider-label">噪声缩放<button class="rnp-slider-reset"></button></label>
+				<input id="pseudo-fluid-noise-scale" type="range" class="rnp-slider" min="1" max="200" value="20" default="20" step="1">
+			</div>
+			<span class="rnp-slider-note rnp-pseudo-fluid-only">×0.01，默认 0.20</span>
+			<div class="rnp-slider-wrapper rnp-pseudo-fluid-only">
+				<label for="pseudo-fluid-turbulence-speed" class="rnp-slider-label">湍流速度<button class="rnp-slider-reset"></button></label>
+				<input id="pseudo-fluid-turbulence-speed" type="range" class="rnp-slider" min="1" max="100" value="18" default="18" step="1">
+			</div>
+			<span class="rnp-slider-note rnp-pseudo-fluid-only">指数映射 0.0000025–0.25，默认 0.00002</span>
+			<div class="rnp-slider-wrapper rnp-pseudo-fluid-only">
+				<label for="pseudo-fluid-domain-warping" class="rnp-slider-label">域扭曲程度<button class="rnp-slider-reset"></button></label>
+				<input id="pseudo-fluid-domain-warping" type="range" class="rnp-slider" min="1" max="200" value="36" default="36" step="1">
+			</div>
+			<span class="rnp-slider-note rnp-pseudo-fluid-only">×0.01，默认 0.36</span>
+			<div class="rnp-slider-wrapper rnp-pseudo-fluid-only">
+				<label for="pseudo-fluid-deformation-speed" class="rnp-slider-label">地形变形速度<button class="rnp-slider-reset"></button></label>
+				<input id="pseudo-fluid-deformation-speed" type="range" class="rnp-slider" min="1" max="100" value="30" default="30" step="1">
+			</div>
+			<span class="rnp-slider-note rnp-pseudo-fluid-only">×0.0001，默认 0.003</span>
+			<div class="rnp-slider-wrapper rnp-pseudo-fluid-only">
+				<label for="pseudo-fluid-translation-speed" class="rnp-slider-label">地形平移速度<button class="rnp-slider-reset"></button></label>
+				<input id="pseudo-fluid-translation-speed" type="range" class="rnp-slider" min="1" max="100" value="30" default="30" step="1">
+			</div>
+			<span class="rnp-slider-note rnp-pseudo-fluid-only">×0.0001，默认 0.003</span>
+			<div class="rnp-slider-wrapper rnp-pseudo-fluid-only">
+				<label for="pseudo-fluid-translation-dir-x" class="rnp-slider-label">平移方向 X<button class="rnp-slider-reset"></button></label>
+				<input id="pseudo-fluid-translation-dir-x" type="range" class="rnp-slider" min="-100" max="100" value="100" default="100" step="1">
+			</div>
+			<span class="rnp-slider-note rnp-pseudo-fluid-only">×0.01，默认 1.0</span>
+			<div class="rnp-slider-wrapper rnp-pseudo-fluid-only">
+				<label for="pseudo-fluid-translation-dir-y" class="rnp-slider-label">平移方向 Y<button class="rnp-slider-reset"></button></label>
+				<input id="pseudo-fluid-translation-dir-y" type="range" class="rnp-slider" min="-100" max="100" value="50" default="50" step="1">
+			</div>
+			<span class="rnp-slider-note rnp-pseudo-fluid-only">×0.01，默认 0.5</span>
+			<!-- 伪流体暗化 -->
+			<div class="rnp-slider-wrapper rnp-pseudo-fluid-only" style="transition: all 0s;">
+				<label for="bg-dim-for-pseudo-fluid-bg" class="rnp-slider-label">暗化<button class="rnp-slider-reset"></button></label>
+				<input id="bg-dim-for-pseudo-fluid-bg" type="range" class="rnp-slider" min="0" max="90" value="30" default="30">
+			</div>
+			<div class="rnp-slider-wrapper rnp-none-only bg-blur-for-none-bg-mask">
 				<label for="bg-blur-for-none-bg-mask" class="rnp-slider-label">遮罩模糊<button class="rnp-slider-reset"></button></label>
 				<input id="bg-blur-for-none-bg-mask" type="range" class="rnp-slider" min="0" max="100" value="0" default="0">
 			</div>
-			<div class="rnp-slider-wrapper bg-dim-for-none-bg-mask" style="transition: all 0s;"> <!-- 无背景 遮罩 独立的暗化值 -->
+			<div class="rnp-slider-wrapper rnp-none-only bg-dim-for-none-bg-mask" style="transition: all 0s;">
 				<label for="bg-dim-for-none-bg-mask" class="rnp-slider-label">遮罩暗化<button class="rnp-slider-reset"></button></label>
 				<input id="bg-dim-for-none-bg-mask" type="range" class="rnp-slider" min="0" max="90" value="0" default="0">
 			</div>

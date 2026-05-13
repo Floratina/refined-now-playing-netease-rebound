@@ -1,0 +1,597 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>Fluid Cover Shader</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #000;
+        }
+        /* 允许一定画布溢出，实现无边界效果，而非循环边界 */
+        #canvas-container {
+            position: absolute;
+            top: -5%; 
+            left: -5%;
+            width: 110%; 
+            height: 110%;
+        }
+    </style>
+</head>
+<body>
+    <div id="canvas-container"></div>
+    <!-- 隐藏的 Canvas 用于缩小和处理图片 -->
+    <canvas id="hidden-canvas" width="128" height="128" style="display:none;"></canvas>
+
+    <script type="module">
+        import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.158.0/build/three.module.js';
+
+        // ==========================================
+        // 核心自定义参数区域 (完全按照您的要求提取)
+        // ==========================================
+        const CONFIG = {
+            // 图片 URL 字段 (支持网络图片，需允许 CORS)
+            IMAGE_URL: 'https://p4.music.126.net/G64f7laqRnkLv7XQzLgghQ==/109951163936077658.jpg',
+
+            // 提取颜色相关的参数
+            PLAIN_CONTOUR_COUNT: 18, // 平原等高线总数量 (主色调 a 种)
+            HILL_CONTOUR_COUNT: 18,  // 山丘等高线总数量 (辅助色调 b 种)
+            // 总取色数量将为 a + b = 36 种 (实际为 60)
+
+            // 杂色过滤阈值 (丢弃占比低于该比例的颜色，默认 0.005 即 0.5%)
+            MIN_COLOR_RATIO_THRESHOLD: 0.0006,
+
+            // 全色彩强呈现系数 (控制色带的重复频率。建议设置为 2.0 - 4.0 左右。
+            // 越大，等高线被折叠强行挤在屏幕内的次数越多，确保绝不会出现大面积单一纯色的情况)
+            ALL_COLORS_PRESENCE_FACTOR: 10.0,
+
+            // === 暗色提亮/增艳处理 ===
+            // 控制多暗的颜色会被处理 (Lightness 低于此值触发，0.0-1.0)
+            DARK_COLOR_LIGHTNESS_THRESHOLD: 0.35,
+            // 触发后，明度额外提升量 (直接相加)
+            DARK_COLOR_LIGHTNESS_BOOST: 0.04,
+            // 触发后，饱和度额外提升量 (直接相加，使颜色更浓郁而不是惨白)
+            DARK_COLOR_SATURATION_BOOST: 0.08,
+
+            // 色彩映射中段概率参数 (控制主流颜色、浓郁色倾向于分布在中间的严格程度，1.0为最严格)
+            COLOR_MID_DISTRIBUTION_STRICTNESS: 1.0, 
+            
+            // 画面整体色彩修饰 (直接乘数，1.0 为不改变)
+            GLOBAL_SATURATION: 1.65,  
+            GLOBAL_LIGHTNESS: 0.95,   
+
+            // === 地形与流体效果参数 ===
+            PLAIN_AREA_RATIO: 0.52,   // 平原面积偏好 (通过 S型曲线 映射权重)
+            TERRAIN_UNIFORMITY: 0.55, // 平原均匀程度 (大于 1.0 让平原连成大片，山丘更陡峭集中；小于 1.0 则山丘均匀)
+            CONTOUR_SMOOTHNESS: 0.0005,// 等高线边缘平缓程度 (值越大，等高线小弯曲越少，边缘越平滑)
+            
+            // === 噪声与运动参数 ===
+            NOISE_SCALE: 0.20,        // 噪声缩放度 (默认 0.2)
+            TURBULENCE_SPEED: 0.00002,  // 湍流速度 (默认 0.05)
+            DOMAIN_WARPING: 0.36,     // 域扭曲程度 (控制 Metaball 状拉扯融合效果的强烈度)
+            TERRAIN_DEFORMATION_SPEED: 0.003, // 地形整体的变形速度 (山丘变化形状的速度)
+            
+            TERRAIN_TRANSLATION_SPEED: 0.003, // 地形整体平移速度 (缓慢平移)
+            TERRAIN_TRANSLATION_DIR_X: 1.0,   // 平移方向 X
+            TERRAIN_TRANSLATION_DIR_Y: 0.5,   // 平移方向 Y
+
+            // === 渲染与性能 ===
+            GAUSSIAN_BLUR: 32,        // 高斯模糊程度 (默认 0，单位 px，作用于 CSS 滤镜)
+            FPS: 60                  // 总帧率限制
+        };
+
+        // 应用高斯模糊
+        document.getElementById('canvas-container').style.filter = `blur(${CONFIG.GAUSSIAN_BLUR}px)`;
+
+        // ==========================================
+        // 工具函数：RGB 与 HSL 转换
+        // ==========================================
+        function rgbToHsl(r, g, b) {
+            r /= 255, g /= 255, b /= 255;
+            let max = Math.max(r, g, b), min = Math.min(r, g, b);
+            let h, s, l = (max + min) / 2;
+            if (max == min) {
+                h = s = 0; 
+            } else {
+                let d = max - min;
+                s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+                switch (max) {
+                    case r: h = (g - b) / d + (g < b ? 6 : 0); break;
+                    case g: h = (b - r) / d + 2; break;
+                    case b: h = (r - g) / d + 4; break;
+                }
+                h /= 6;
+            }
+            return [h, s, l];
+        }
+
+        function hslToRgb(h, s, l) {
+            let r, g, b;
+            if (s == 0) {
+                r = g = b = l; 
+            } else {
+                const hue2rgb = (p, q, t) => {
+                    if (t < 0) t += 1;
+                    if (t > 1) t -= 1;
+                    if (t < 1 / 6) return p + (q - p) * 6 * t;
+                    if (t < 1 / 2) return q;
+                    if (t < 2 / 3) return p + (q - p) * (2 / 3 - t) * 6;
+                    return p;
+                }
+                let q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+                let p = 2 * l - q;
+                r = hue2rgb(p, q, h + 1 / 3);
+                g = hue2rgb(p, q, h);
+                b = hue2rgb(p, q, h - 1 / 3);
+            }
+            return [Math.round(r * 255), Math.round(g * 255), Math.round(b * 255)];
+        }
+
+        function colorDistanceHSL(hsl1, hsl2) {
+            // 柱坐标系距离
+            const dh = Math.min(Math.abs(hsl1[0] - hsl2[0]), 1.0 - Math.abs(hsl1[0] - hsl2[0])) * 2.0;
+            const ds = hsl1[1] - hsl2[1];
+            const dl = hsl1[2] - hsl2[2];
+            return Math.sqrt(dh*dh + ds*ds + dl*dl);
+        }
+
+        // ==========================================
+        // 核心步骤 1：处理图片并提取高阶色彩
+        // ==========================================
+        function processImageAndExtractColors(imgElement) {
+            const canvas = document.getElementById('hidden-canvas');
+            const ctx = canvas.getContext('2d');
+            // 改为 128x128 分辨率处理，提高精度
+            ctx.drawImage(imgElement, 0, 0, 128, 128);
+            const imgData = ctx.getImageData(0, 0, 128, 128).data;
+
+            // 使用直接索引数组代替 Map，量化空间为 21 * 11 * 11 = 2541 个桶
+            const H_BINS = 21, S_BINS = 11, L_BINS = 11;
+            const TOTAL_BINS = H_BINS * S_BINS * L_BINS;
+            const binCounts = new Uint16Array(TOTAL_BINS);
+            const binR = new Float64Array(TOTAL_BINS);
+            const binG = new Float64Array(TOTAL_BINS);
+            const binB = new Float64Array(TOTAL_BINS);
+            const binH = new Float64Array(TOTAL_BINS);
+            const binS = new Float64Array(TOTAL_BINS);
+            const binL = new Float64Array(TOTAL_BINS);
+            let totalPixels = 0;
+
+            // 1. 量化并统计颜色频率
+            for (let i = 0; i < imgData.length; i += 4) {
+                if (imgData[i + 3] < 128) continue;
+                const r = imgData[i], g = imgData[i + 1], b = imgData[i + 2];
+                const [h, s, l] = rgbToHsl(r, g, b);
+                
+                const hBin = Math.round(h * 20);
+                const sBin = Math.round(s * 10);
+                const lBin = Math.round(l * 10);
+                const idx = hBin * (S_BINS * L_BINS) + sBin * L_BINS + lBin;
+
+                binCounts[idx]++;
+                binR[idx] += r; binG[idx] += g; binB[idx] += b;
+                binH[idx] += h; binS[idx] += s; binL[idx] += l;
+                totalPixels++;
+            }
+
+            // 杂色过滤：丢弃占比低于特定阈值的颜色
+            const thresholdCount = totalPixels * CONFIG.MIN_COLOR_RATIO_THRESHOLD;
+            
+            // 计算所有簇的真实平均色，并进行过滤
+            let clusters = [];
+            for (let idx = 0; idx < TOTAL_BINS; idx++) {
+                const cnt = binCounts[idx];
+                if (cnt < thresholdCount) continue;
+                const avgR = binR[idx] / cnt, avgG = binG[idx] / cnt, avgB = binB[idx] / cnt;
+                clusters.push({
+                    count: cnt,
+                    r: avgR,
+                    g: avgG,
+                    b: avgB,
+                    hsl: rgbToHsl(avgR, avgG, avgB)
+                });
+            }
+
+            // 异常兜底：如果过滤太狠导致没颜色了，就选原图占比最高的那一个
+            if (clusters.length === 0) {
+                let maxIdx = 0, maxCnt = 0;
+                for (let idx = 0; idx < TOTAL_BINS; idx++) {
+                    if (binCounts[idx] > maxCnt) { maxCnt = binCounts[idx]; maxIdx = idx; }
+                }
+                const cnt = binCounts[maxIdx];
+                const avgR = binR[maxIdx] / cnt, avgG = binG[maxIdx] / cnt, avgB = binB[maxIdx] / cnt;
+                clusters.push({
+                    count: cnt,
+                    r: avgR, g: avgG, b: avgB,
+                    hsl: rgbToHsl(avgR, avgG, avgB)
+                });
+            }
+
+            clusters.sort((a, b) => b.count - a.count);
+
+            const aCount = CONFIG.PLAIN_CONTOUR_COUNT;
+            const bCount = CONFIG.HILL_CONTOUR_COUNT;
+            const totalCountTarget = aCount + bCount;
+            const selectedColors = [];
+
+            // 2. 提取 a 种主色调
+            for (let i = 0; i < Math.min(aCount, clusters.length); i++) {
+                selectedColors.push(clusters[i]);
+            }
+
+            // 3. 提取 b 种辅助色调 (注重与已选颜色的多样性，不改变HSL)
+            // 优化：缓存每个候选色到已选集合的最小距离，避免每轮重复计算
+            const remainingCount = clusters.length - aCount;
+            if (remainingCount > 0) {
+                // 初始化候选色数组及其缓存的最小距离
+                const candidates = new Array(remainingCount);
+                const minDists = new Float64Array(remainingCount);
+                const richnessPenalties = new Float64Array(remainingCount);
+                const used = new Uint8Array(remainingCount);
+
+                for (let i = 0; i < remainingCount; i++) {
+                    candidates[i] = clusters[aCount + i];
+                    richnessPenalties[i] = Math.abs(candidates[i].hsl[2] - 0.5);
+                    // 计算到初始已选颜色集合的最小距离
+                    let minD = Infinity;
+                    for (let j = 0; j < selectedColors.length; j++) {
+                        const d = colorDistanceHSL(candidates[i].hsl, selectedColors[j].hsl);
+                        if (d < minD) minD = d;
+                    }
+                    minDists[i] = minD;
+                }
+
+                while (selectedColors.length < totalCountTarget) {
+                    let bestIdx = -1;
+                    let maxScore = -Infinity;
+
+                    for (let i = 0; i < remainingCount; i++) {
+                        if (used[i]) continue;
+                        const score = minDists[i] - richnessPenalties[i] * 0.2;
+                        if (score > maxScore) {
+                            maxScore = score;
+                            bestIdx = i;
+                        }
+                    }
+
+                    if (bestIdx === -1) break;
+
+                    used[bestIdx] = 1;
+                    selectedColors.push(candidates[bestIdx]);
+
+                    // 仅用新加入的颜色更新其余候选色的缓存最小距离
+                    const newHsl = candidates[bestIdx].hsl;
+                    for (let i = 0; i < remainingCount; i++) {
+                        if (used[i]) continue;
+                        const d = colorDistanceHSL(candidates[i].hsl, newHsl);
+                        if (d < minDists[i]) minDists[i] = d;
+                    }
+                }
+            }
+
+            // 4. 计算分配权重：基于真实选出的颜色像素总数，得出相对分布比例
+            const totalSelectedPixels = selectedColors.reduce((sum, c) => sum + c.count, 0);
+
+            // 5. 综合优先级打分 (决定谁放在中间)
+            const scoredColors = selectedColors.map(c => {
+                const [h, s, l] = c.hsl;
+                const dominance = c.count / totalSelectedPixels; // 在选中颜色中的占比
+                
+                // 浓郁度: 饱和度高，且明度偏中或中偏下
+                const richness = s * (1.0 - Math.abs(l - 0.4) * 2.0); 
+                
+                // 极暗或极亮惩罚 (强制赶向边缘)
+                const isExtreme = (l < 0.12 || l > 0.88) ? 1 : 0;
+                
+                // 综合优先级打分
+                let priority = (dominance * 10.0) + (richness * 2.0) - (isExtreme * 1000.0);
+                return { ...c, priority, dominance };
+            });
+
+            // 按优先级降序排序 (最高优先级的在最前面)
+            scoredColors.sort((a, b) => b.priority - a.priority);
+
+            // 6. 生成高精度比例数组（实现直方图等高线分布）
+            // 我们生成一个 2048 长度的一维数组，根据 dominance 分配宽度，
+            // 使得 shader 里不论 h 值落在哪里，取出的颜色都符合面积占比。
+            const MAPPING_RESOLUTION = 2048;
+            const finalSortedColors = new Array(MAPPING_RESOLUTION);
+            
+            let blocks = scoredColors.map(c => {
+                // 宽度严格按图片原本占比
+                let width = Math.max(1, Math.round(c.dominance * MAPPING_RESOLUTION));
+                
+                let [h, s, l] = c.hsl;
+                
+                // === 暗色提亮与增艳逻辑 ===
+                if (l < CONFIG.DARK_COLOR_LIGHTNESS_THRESHOLD) {
+                    l += CONFIG.DARK_COLOR_LIGHTNESS_BOOST;
+                    s += CONFIG.DARK_COLOR_SATURATION_BOOST;
+                }
+
+                // 应用全局饱和度和明度调整
+                s = Math.min(1.0, Math.max(0.0, s * CONFIG.GLOBAL_SATURATION));
+                l = Math.min(1.0, Math.max(0.0, l * CONFIG.GLOBAL_LIGHTNESS));
+                return { rgb: hslToRgb(h, s, l), width: width };
+            });
+
+            // 修复由于四舍五入导致的总长度可能不等于 2048 的问题
+            let currentTotalWidth = blocks.reduce((sum, b) => sum + b.width, 0);
+            if (currentTotalWidth !== MAPPING_RESOLUTION && blocks.length > 0) {
+                blocks[0].width += (MAPPING_RESOLUTION - currentTotalWidth);
+            }
+
+            // 中心分布逻辑：交替从数组的中间往两端推积颜色块
+            // 使用批量填充代替逐像素赋值
+            let leftBoundary = Math.floor(MAPPING_RESOLUTION / 2);
+            let rightBoundary = leftBoundary;
+
+            for (let i = 0; i < blocks.length; i++) {
+                let b = blocks[i];
+                if (i % 2 === 0) {
+                    // 往左填
+                    let start = Math.max(0, leftBoundary - b.width);
+                    for (let j = start; j < leftBoundary; j++) finalSortedColors[j] = b.rgb;
+                    leftBoundary = start;
+                } else {
+                    // 往右填
+                    let end = Math.min(MAPPING_RESOLUTION, rightBoundary + b.width);
+                    for (let j = rightBoundary; j < end; j++) finalSortedColors[j] = b.rgb;
+                    rightBoundary = end;
+                }
+            }
+
+            // 防御性填充：填补可能剩余的极少空隙
+            const fallbackRgb = blocks[0].rgb;
+            let lastValid = fallbackRgb;
+            for (let i = 0; i < MAPPING_RESOLUTION; i++) {
+                if (!finalSortedColors[i]) {
+                    finalSortedColors[i] = lastValid;
+                } else {
+                    lastValid = finalSortedColors[i];
+                }
+            }
+
+            return finalSortedColors;
+        }
+
+        // ==========================================
+        // 核心步骤 2：初始化 Three.js 着色器
+        // ==========================================
+        let scene, camera, renderer, material;
+        let lastTime = performance.now();
+
+        function initThreeJS(colorsArr) {
+            const container = document.getElementById('canvas-container');
+            renderer = new THREE.WebGLRenderer({ antialias: false, alpha: false });
+            renderer.setSize(container.clientWidth, container.clientHeight);
+            // 确保不偏色，直接输出原生还原色彩
+            renderer.outputColorSpace = THREE.SRGBColorSpace; 
+            container.appendChild(renderer.domElement);
+
+            camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+            scene = new THREE.Scene();
+
+            // 生成色板纹理 (1D纹理以传递颜色)
+            const colorData = new Uint8Array(colorsArr.length * 4);
+            for (let i = 0; i < colorsArr.length; i++) {
+                colorData[i * 4 + 0] = colorsArr[i][0];
+                colorData[i * 4 + 1] = colorsArr[i][1];
+                colorData[i * 4 + 2] = colorsArr[i][2];
+                colorData[i * 4 + 3] = 255;
+            }
+            const colorTexture = new THREE.DataTexture(colorData, colorsArr.length, 1, THREE.RGBAFormat);
+            colorTexture.needsUpdate = true;
+            // 禁止插值，我们需要硬边缘的等高线色块
+            colorTexture.magFilter = THREE.NearestFilter;
+            colorTexture.minFilter = THREE.NearestFilter;
+
+            // 引入安全的随机位移种子，避免浮点溢出规律化
+            const randomSeed = Math.random() * 50.0; 
+
+            // 着色器材质
+            material = new THREE.ShaderMaterial({
+                uniforms: {
+                    u_time: { value: 0.0 },
+                    u_colorPalette: { value: colorTexture },
+                    u_allColorsPresence: { value: CONFIG.ALL_COLORS_PRESENCE_FACTOR },
+                    u_noiseScale: { value: CONFIG.NOISE_SCALE },
+                    u_turbulenceSpeed: { value: CONFIG.TURBULENCE_SPEED },
+                    u_domainWarping: { value: CONFIG.DOMAIN_WARPING },
+                    u_terrainUniformity: { value: CONFIG.TERRAIN_UNIFORMITY },
+                    u_smoothness: { value: CONFIG.CONTOUR_SMOOTHNESS },
+                    u_randomSeed: { value: randomSeed },
+                    u_translationSpeed: { value: CONFIG.TERRAIN_TRANSLATION_SPEED },
+                    u_translationDir: { value: new THREE.Vector2(CONFIG.TERRAIN_TRANSLATION_DIR_X, CONFIG.TERRAIN_TRANSLATION_DIR_Y).normalize() },
+                    u_deformationSpeed: { value: CONFIG.TERRAIN_DEFORMATION_SPEED },
+                    u_resolution: { value: new THREE.Vector2(container.clientWidth, container.clientHeight) }
+                },
+                vertexShader: `
+                    varying vec2 vUv;
+                    void main() {
+                        vUv = uv;
+                        gl_Position = vec4(position, 1.0); // 全屏 2D 绘制
+                    }
+                `,
+                fragmentShader: `
+                    uniform float u_time;
+                    uniform sampler2D u_colorPalette;
+                    uniform float u_allColorsPresence;
+                    uniform float u_noiseScale;
+                    uniform float u_turbulenceSpeed;
+                    uniform float u_domainWarping;
+                    uniform float u_terrainUniformity;
+                    uniform float u_smoothness;
+                    uniform float u_randomSeed;
+                    uniform float u_translationSpeed;
+                    uniform vec2 u_translationDir;
+                    uniform float u_deformationSpeed;
+                    uniform vec2 u_resolution;
+
+                    varying vec2 vUv;
+
+                    // ====== Ashima 3D Simplex Noise ======
+                    vec3 mod289(vec3 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
+                    vec4 mod289(vec4 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
+                    vec4 permute(vec4 x) { return mod289(((x*34.0)+1.0)*x); }
+                    vec4 taylorInvSqrt(vec4 r) { return 1.79284291400159 - 0.85373472095314 * r; }
+
+                    float snoise(vec3 v) {
+                        const vec2  C = vec2(1.0/6.0, 1.0/3.0) ;
+                        const vec4  D = vec4(0.0, 0.5, 1.0, 2.0);
+                        vec3 i  = floor(v + dot(v, C.yyy) );
+                        vec3 x0 = v - i + dot(i, C.xxx) ;
+                        vec3 g = step(x0.yzx, x0.xyz);
+                        vec3 l = 1.0 - g;
+                        vec3 i1 = min( g.xyz, l.zxy );
+                        vec3 i2 = max( g.xyz, l.zxy );
+                        vec3 x1 = x0 - i1 + C.xxx;
+                        vec3 x2 = x0 - i2 + C.yyy;
+                        vec3 x3 = x0 - D.yyy;
+                        i = mod289(i);
+                        vec4 p = permute( permute( permute(
+                                     i.z + vec4(0.0, i1.z, i2.z, 1.0 ))
+                                   + i.y + vec4(0.0, i1.y, i2.y, 1.0 ))
+                                   + i.x + vec4(0.0, i1.x, i2.x, 1.0 ));
+                        float n_ = 0.142857142857;
+                        vec3  ns = n_ * D.wyz - D.xzx;
+                        vec4 j = p - 49.0 * floor(p * ns.z * ns.z);
+                        vec4 x_ = floor(j * ns.z);
+                        vec4 y_ = floor(j - 7.0 * x_ );
+                        vec4 x = x_ *ns.x + ns.yyyy;
+                        vec4 y = y_ *ns.x + ns.yyyy;
+                        vec4 h = 1.0 - abs(x) - abs(y);
+                        vec4 b0 = vec4( x.xy, y.xy );
+                        vec4 b1 = vec4( x.zw, y.zw );
+                        vec4 s0 = floor(b0)*2.0 + 1.0;
+                        vec4 s1 = floor(b1)*2.0 + 1.0;
+                        vec4 sh = -step(h, vec4(0.0));
+                        vec4 a0 = b0.xzyw + s0.xzyw*sh.xxyy ;
+                        vec4 a1 = b1.xzyw + s1.xzyw*sh.zzww ;
+                        vec3 p0 = vec3(a0.xy,h.x);
+                        vec3 p1 = vec3(a0.zw,h.y);
+                        vec3 p2 = vec3(a1.xy,h.z);
+                        vec3 p3 = vec3(a1.zw,h.w);
+                        vec4 norm = taylorInvSqrt(vec4(dot(p0,p0), dot(p1,p1), dot(p2, p2), dot(p3,p3)));
+                        p0 *= norm.x;
+                        p1 *= norm.y;
+                        p2 *= norm.z;
+                        p3 *= norm.w;
+                        vec4 m = max(0.6 - vec4(dot(x0,x0), dot(x1,x1), dot(x2,x2), dot(x3,x3)), 0.0);
+                        m = m * m;
+                        return 42.0 * dot( m*m, vec4( dot(p0,x0), dot(p1,x1), dot(p2,x2), dot(p3,x3) ) );
+                    }
+
+                    // 分形布朗运动 (平滑地形)
+                    float fbm(vec3 p) {
+                        float v = 0.0;
+                        float a = 0.5;
+                        vec3 shift = vec3(100.0);
+                        for (int i = 0; i < 4; ++i) {
+                            v += a * snoise(p);
+                            p = p * 2.0 + shift;
+                            a *= 0.5;
+                        }
+                        return v;
+                    }
+
+                    void main() {
+                        // 修正比例
+                        vec2 st = vUv;
+                        st.x *= u_resolution.x / u_resolution.y;
+
+                        // 缩放和基础平移
+                        vec2 baseP = st * u_noiseScale + u_translationDir * (u_time * u_translationSpeed) + vec2(u_randomSeed);
+
+                        // 域扭曲 (Domain Warping): 多重叠加制造流体 Metaball 融合感
+                        // 第一重扭曲
+                        vec3 p1 = vec3(baseP, u_time * u_deformationSpeed);
+                        float qx = fbm(p1 + vec3(0.0, 0.0, u_time * u_turbulenceSpeed));
+                        float qy = fbm(p1 + vec3(5.2, 1.3, u_time * u_turbulenceSpeed));
+                        vec3 q = vec3(qx, qy, 0.0);
+
+                        // 第二重扭曲
+                        vec3 p2 = vec3(baseP, u_time * u_deformationSpeed * 1.2);
+                        float rx = fbm(p2 + u_domainWarping * q + vec3(1.7, 9.2, 0.1));
+                        float ry = fbm(p2 + u_domainWarping * q + vec3(8.3, 2.8, 0.2));
+                        vec3 r = vec3(rx, ry, 0.0);
+
+                        // 最终地形高度 [-1.0, 1.0]
+                        float rawH = fbm(vec3(baseP, u_time * u_deformationSpeed * 0.8) + u_domainWarping * r);
+                        
+                        // 强制拉伸范围：如果局部高度变化不够剧烈（也就是你说的长出一大片同色的情况）
+                        // 乘以 u_allColorsPresence 能强制这个波浪在 -1.0 到 1.0 之间多来回几次
+                        float h = fract(rawH * u_allColorsPresence * 0.5 + 0.5);
+
+                        // === 温和 S型曲线地形塑形 ===
+                        // 利用 u_terrainUniformity 控制中间(平原)与边缘(山峰)的聚集度。
+                        // 如果值大于1，中间的坡度变缓，主色彩将占据极大面积 (>50%)
+                        float centered = 2.0 * h - 1.0; 
+                        float sCurved = 0.5 + 0.5 * pow(abs(centered), u_terrainUniformity) * sign(centered);
+                        
+                        // 叠加平滑逻辑消除极其锐利的跳变点
+                        float smoothed = smoothstep(-0.1, 1.1, sCurved); 
+                        h = mix(sCurved, smoothed, u_smoothness);
+                        
+                        // 采样调色板纹理 (这里不再量化为等高线阶梯，因为我们的纹理已经按图片真实比例在 2048 像素内画好了宽窄不一的硬边缘色块，且配置了 NearestFilter)
+                        vec4 finalColor = texture2D(u_colorPalette, vec2(h, 0.5));
+
+                        gl_FragColor = vec4(finalColor.rgb, 1.0);
+                    }
+                `
+            });
+
+            // 只需要一个全屏幕的面
+            const geometry = new THREE.PlaneGeometry(2, 2);
+            const mesh = new THREE.Mesh(geometry, material);
+            scene.add(mesh);
+
+            // 处理窗口大小变化
+            window.addEventListener('resize', () => {
+                renderer.setSize(container.clientWidth, container.clientHeight);
+                material.uniforms.u_resolution.value.set(container.clientWidth, container.clientHeight);
+            });
+
+            animate();
+        }
+
+        // ==========================================
+        // 渲染循环与帧率控制
+        // ==========================================
+        function animate() {
+            requestAnimationFrame(animate);
+
+            const now = performance.now();
+            const elapsed = now - lastTime;
+            const targetInterval = 1000 / CONFIG.FPS;
+
+            if (elapsed > targetInterval) {
+                lastTime = now - (elapsed % targetInterval);
+                material.uniforms.u_time.value += (elapsed * 0.001); // 秒为单位更新时间
+                renderer.render(scene, camera);
+            }
+        }
+
+        // ==========================================
+        // 启动逻辑
+        // ==========================================
+        const img = new Image();
+        img.crossOrigin = "Anonymous"; // 允许获取网络图片像素
+        img.onload = () => {
+            const extractedColors = processImageAndExtractColors(img);
+            initThreeJS(extractedColors);
+        };
+        img.onerror = () => {
+            console.error("图片加载失败，可能是因为 CORS 限制。请尝试其他 URL。");
+            // 失败时传入默认测试彩色
+            const fallbackColors = Array.from({length: 36}, (_, i) => [
+                Math.random() * 255, Math.random() * 255, Math.random() * 255
+            ]);
+            initThreeJS(fallbackColors);
+        };
+        img.src = CONFIG.IMAGE_URL;
+
+    </script>
+</body>
+</html>
