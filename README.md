@@ -2,9 +2,11 @@
 
 一个美化网易云音乐播放界面的 [BetterNCM](https://github.com/MicroCBer/BetterNCM) 插件
 
-# Status
+增加了全新的伪流体效果，降低 50% 以上的 GPU 占用。
 
-Since I no longer use CloudMusic, the maintenance of this project has been suspended indefinitely.
+# 已知问题
+
+该伪流体在 C++ & CEF 编写的旧版本网易云上会比较频繁地触发内存的 GC，每次 GC 的时候 JS 主线程会短暂卡死，导致流体卡住十几毫秒。受限于老版本网易云和 BetterNCM 的架构，该问题可能无法修复。
 
 # 安装
 
@@ -13,12 +15,4 @@ Since I no longer use CloudMusic, the maintenance of this project has been suspe
 
 # 效果
 
-https://user-images.githubusercontent.com/23134847/216518149-9d85c6a6-4ad5-4c2c-9843-a2f65f610fd0.mp4
-
-![screenshot1](screenshot1.jpg)
-
-![screenshot2](screenshot3.jpg)
-
-![screenshot3](screenshot2.jpg)
-
-![screenshot4](screenshot4.jpg)
+https://github.com/viceasha2008/refined-now-playing-netease-rebound/blob/master/preview.mp4
