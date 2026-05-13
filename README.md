@@ -1,6 +1,8 @@
 # Refined Now Playing
 
-一个美化网易云音乐播放界面的 [BetterNCM](https://github.com/MicroCBer/BetterNCM) 插件
+一个美化网易云音乐播放界面的 [BetterNCM](https://github.com/MicroCBer/BetterNCM) 插件。
+
+本项目修改自 [solstice23](https://github.com/solstice23) 的[项目](https://github.com/solstice23/refined-now-playing-netease)。
 
 增加了全新的伪流体效果，降低 50% 以上的 GPU 占用。
 
@@ -10,8 +12,10 @@
 
 ## 安装
 
-0. 安装 [BetterNCM](https://github.com/MicroCBer/BetterNCM) 插件
-1. 在插件商店中安装
+本插件目前未在 BetterNCM 插件商店上架，可以自行删除旧的 RefinedNowPlaying插件，之后粘贴 Release 里的 `.plugins` 文件到 `betterncm\plugins` 文件夹，并删除 `betterncm\plugins_runtime` 里面原有的 RefinedNowPlaying 文件夹。然后运行网易云即可。
+
+~~0. 安装 [BetterNCM](https://github.com/MicroCBer/BetterNCM) 插件~~
+~~1. 在插件商店中安装~~
 
 ## 效果
 
