@@ -15,4 +15,6 @@
 
 # 效果
 
-!(https://github.com/viceasha2008/refined-now-playing-netease-rebound/blob/master/preview.mp4)
+https://github.com/user-attachments/assets/54809976-c293-4ac2-9512-95077c4681d6
+
+
